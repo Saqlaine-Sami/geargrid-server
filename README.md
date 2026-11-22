@@ -14,6 +14,9 @@ GearGrid Server is the Express.js and MongoDB backend powering the GearGrid Equi
 - **Favorites Management:** Save, view, and remove customer favorite equipment in MongoDB.
 - **Stripe Checkout & Payments:** Server-verified Stripe Checkout session creation, booking status update, inventory update, and transaction recording in the `payments` collection.
 - **Dashboard Analytics:** Dynamic MongoDB aggregations for Admin platform metrics and Owner earnings statistics.
+- **Server-Side Pagination:** Paginated endpoints for All Equipment and Booking History (Customer, Owner, Admin).
+- **Automated Booking Status Update (Cron Job):** Scheduled `node-cron` job (plus Vercel Cron endpoint `/api/cron/update-bookings`) automatically marks past-due confirmed rentals as `completed` and restores inventory.
+- **Automated Email Notifications:** Sends completion notification emails via `nodemailer` to both Renters and Equipment Owners when a booking is completed.
 
 ## NPM Packages Used
 - `express` — Web framework for REST APIs
@@ -22,6 +25,8 @@ GearGrid Server is the Express.js and MongoDB backend powering the GearGrid Equi
 - `mongodb` — Official MongoDB Node.js driver
 - `jsonwebtoken` — JWT token verification
 - `stripe` — Stripe Checkout payment integration
+- `node-cron` — Automated scheduled cron job for expired bookings
+- `nodemailer` — Automated email notifications for completed bookings
 - `nodemon` — Development hot-reloading
 
 ## Environment Variables

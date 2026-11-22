@@ -23,11 +23,20 @@ router.get("/featured", async (req, res) => {
   }
 });
 
-// Challenge 1: Server-side search, filtering, and sorting on approved equipment
+// Challenge 1 + Optional Pagination: Server-side search, filtering, sorting, and pagination on approved equipment
 router.get("/", async (req, res) => {
   try {
-    const { search, category, rentalType, minPrice, maxPrice, availability, sort } =
-      req.query;
+    const {
+      search,
+      category,
+      rentalType,
+      minPrice,
+      maxPrice,
+      availability,
+      sort,
+      page,
+      limit,
+    } = req.query;
     const query = { status: "Approved" };
 
     if (search && search.trim()) {
@@ -63,6 +72,31 @@ router.get("/", async (req, res) => {
     if (sort === "price_asc") sortOption = { rentalPrice: 1 };
     else if (sort === "price_desc") sortOption = { rentalPrice: -1 };
     else if (sort === "newest") sortOption = { createdAt: -1 };
+
+    if (page !== undefined || limit !== undefined) {
+      const pageNum = Math.max(1, parseInt(page, 10) || 1);
+      const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10) || 6));
+      const skip = (pageNum - 1) * limitNum;
+
+      const [total, items] = await Promise.all([
+        req.db.collection("equipment").countDocuments(query),
+        req.db
+          .collection("equipment")
+          .find(query)
+          .sort(sortOption)
+          .skip(skip)
+          .limit(limitNum)
+          .toArray(),
+      ]);
+
+      return res.json({
+        items,
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.max(1, Math.ceil(total / limitNum)),
+      });
+    }
 
     const items = await req.db
       .collection("equipment")

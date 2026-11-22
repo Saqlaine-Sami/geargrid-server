@@ -8,8 +8,43 @@ const {
   verifyAdmin,
 } = require("../middlewares/authMiddleware");
 const { calculateRentalAmount } = require("../utils/pricing");
+const { sendBookingCompletedEmails } = require("../utils/mailer");
 
 const router = express.Router();
+
+async function fetchBookingsWithOptionalPagination(db, filter, req) {
+  const { page, limit } = req.query;
+  if (page !== undefined || limit !== undefined) {
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10) || 5));
+    const skip = (pageNum - 1) * limitNum;
+
+    const [total, items] = await Promise.all([
+      db.collection("bookings").countDocuments(filter),
+      db
+        .collection("bookings")
+        .find(filter)
+        .sort({ bookingDate: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .toArray(),
+    ]);
+
+    return {
+      items,
+      total,
+      page: pageNum,
+      limit: limitNum,
+      totalPages: Math.max(1, Math.ceil(total / limitNum)),
+    };
+  }
+
+  return db
+    .collection("bookings")
+    .find(filter)
+    .sort({ bookingDate: -1 })
+    .toArray();
+}
 
 function getStripeClient() {
   if (!process.env.STRIPE_SECRET_KEY) {
@@ -156,49 +191,45 @@ router.delete("/:id/cancel-unpaid", verifyToken, verifyRenter, async (req, res) 
   }
 });
 
-// Customer: get own rental bookings
+// Customer: get own rental bookings (supports pagination)
 router.get("/customer", verifyToken, verifyRenter, async (req, res) => {
   try {
-    const bookings = await req.db
-      .collection("bookings")
-      .find({ customerEmail: req.decoded.email })
-      .sort({ bookingDate: -1 })
-      .toArray();
-    res.json(bookings);
+    const result = await fetchBookingsWithOptionalPagination(
+      req.db,
+      { customerEmail: req.decoded.email },
+      req
+    );
+    res.json(result);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch customer rentals" });
   }
 });
 
-// Owner: get rentals for owner's equipment
+// Owner: get rentals for owner's equipment (supports pagination)
 router.get("/owner", verifyToken, verifyOwner, async (req, res) => {
   try {
-    const bookings = await req.db
-      .collection("bookings")
-      .find({ ownerEmail: req.decoded.email })
-      .sort({ bookingDate: -1 })
-      .toArray();
-    res.json(bookings);
+    const result = await fetchBookingsWithOptionalPagination(
+      req.db,
+      { ownerEmail: req.decoded.email },
+      req
+    );
+    res.json(result);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch owner rentals" });
   }
 });
 
-// Admin: get all rental bookings
+// Admin: get all rental bookings (supports pagination)
 router.get("/admin", verifyToken, verifyAdmin, async (req, res) => {
   try {
-    const bookings = await req.db
-      .collection("bookings")
-      .find({})
-      .sort({ bookingDate: -1 })
-      .toArray();
-    res.json(bookings);
+    const result = await fetchBookingsWithOptionalPagination(req.db, {}, req);
+    res.json(result);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch all rentals" });
   }
 });
 
-// Owner (own equipment) or Admin: update booking status
+// Owner (own equipment) or Admin: update booking status (+ automated completion emails)
 router.patch("/:id/status", verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -240,14 +271,25 @@ router.patch("/:id/status", verifyToken, async (req, res) => {
         );
     }
 
+    const updateSet = { bookingStatus, updatedAt: new Date() };
+    let emailResult = null;
+
+    if (bookingStatus === "completed" && booking.bookingStatus !== "completed") {
+      updateSet.completedAt = new Date();
+      emailResult = await sendBookingCompletedEmails(booking);
+      if (emailResult.sent) {
+        updateSet.emailNotificationSent = true;
+      }
+    }
+
     await req.db
       .collection("bookings")
-      .updateOne(
-        { _id: new ObjectId(id) },
-        { $set: { bookingStatus, updatedAt: new Date() } }
-      );
+      .updateOne({ _id: new ObjectId(id) }, { $set: updateSet });
 
-    res.json({ message: `Booking status updated to ${bookingStatus}` });
+    res.json({
+      message: `Booking status updated to ${bookingStatus}`,
+      emailNotification: emailResult,
+    });
   } catch (error) {
     res.status(500).json({ message: "Failed to update booking status" });
   }
