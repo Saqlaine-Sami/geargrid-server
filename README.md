@@ -4,8 +4,8 @@
 GearGrid Server is the Express.js and MongoDB backend powering the GearGrid Equipment Rental Platform. It provides secure JWT and role-based APIs for equipment listings, server-side search/filter/sorting, customer favorites, rental bookings, Stripe Checkout payments, user management, and Admin/Owner analytics.
 
 ## Live URL
-- Live Client URL: `https://your-client-url.vercel.app`
-- Live Server URL: `https://your-server-url.vercel.app`
+- Live Client URL: https://geargrid-client-ochre.vercel.app
+- Live Server URL: https://geargrid-server.vercel.app
 
 ## Key Features
 - **JWT & Role-Based Access Control (RBAC):** Custom Express middlewares (`verifyToken`, `verifyRenter`, `verifyOwner`, `verifyAdmin`) securing private routes and role-specific operations.
