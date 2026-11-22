@@ -92,32 +92,37 @@ router.post("/checkout", verifyToken, verifyRenter, async (req, res) => {
     const bookingId = bookingResult.insertedId.toString();
 
     const stripe = getStripeClient();
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      mode: "payment",
-      customer_email: req.currentUser.email,
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: `${equipment.name} (${equipment.rentalType} Rental)`,
-              description: `Duration: ${startDate} to ${endDate} | Qty: ${qty}`,
+    let session;
+    try {
+      session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        customer_email: req.currentUser.email,
+        line_items: [
+          {
+            price_data: {
+              currency: "usd",
+              product_data: {
+                name: `${equipment.name} (${equipment.rentalType} Rental)`,
+                description: `Duration: ${startDate} to ${endDate} | Qty: ${qty}`,
+              },
+              unit_amount: Math.round(totalAmount * 100),
             },
-            unit_amount: Math.round(totalAmount * 100),
+            quantity: 1,
           },
-          quantity: 1,
+        ],
+        metadata: {
+          bookingId,
+          equipmentId: equipment._id.toString(),
+          customerEmail: req.currentUser.email,
+          ownerEmail: equipment.ownerEmail,
         },
-      ],
-      metadata: {
-        bookingId,
-        equipmentId: equipment._id.toString(),
-        customerEmail: req.currentUser.email,
-        ownerEmail: equipment.ownerEmail,
-      },
-      success_url: `${process.env.CLIENT_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}&bookingId=${bookingId}`,
-      cancel_url: `${process.env.CLIENT_URL}/payment/cancel?bookingId=${bookingId}`,
-    });
+        success_url: `${process.env.CLIENT_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}&bookingId=${bookingId}`,
+        cancel_url: `${process.env.CLIENT_URL}/payment/cancel?bookingId=${bookingId}`,
+      });
+    } catch (stripeErr) {
+      await req.db.collection("bookings").deleteOne({ _id: bookingResult.insertedId });
+      throw stripeErr;
+    }
 
     await req.db
       .collection("bookings")
