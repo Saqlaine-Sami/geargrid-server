@@ -23,7 +23,9 @@ async function connectDB() {
     await cachedClient.connect();
   }
 
-  cachedDb = cachedClient.db(process.env.MONGODB_DB_NAME || "equipmentRentalDB");
+  cachedDb = cachedClient.db(
+    process.env.MONGODB_DB_NAME || process.env.DB_NAME || "equipmentRentalDB"
+  );
   return cachedDb;
 }
 
