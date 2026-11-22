@@ -9,6 +9,10 @@ const favoriteRoutes = require("./routes/favoriteRoutes");
 const bookingRoutes = require("./routes/bookingRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 const analyticsRoutes = require("./routes/analyticsRoutes");
+const {
+  updateExpiredBookings,
+  startBookingStatusCron,
+} = require("./jobs/bookingStatusCron");
 
 const app = express();
 
@@ -57,6 +61,16 @@ app.use("/api/bookings", bookingRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/analytics", analyticsRoutes);
 
+// Automated Booking Status Update endpoint (for Vercel Cron & manual triggers)
+app.get("/api/cron/update-bookings", async (req, res) => {
+  try {
+    const result = await updateExpiredBookings(req.db);
+    res.json({ status: "OK", ...result });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to run booking status update job" });
+  }
+});
+
 // 404 fallback
 app.use((req, res) => {
   res.status(404).json({ message: "API route not found" });
@@ -64,6 +78,7 @@ app.use((req, res) => {
 
 const PORT = process.env.PORT || 5000;
 if (!process.env.VERCEL) {
+  startBookingStatusCron();
   app.listen(PORT, () => {
     console.log(`GearGrid Server running on http://localhost:${PORT}`);
   });
